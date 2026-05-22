@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GhostMail - Temp Mail</title>
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:Arial, sans-serif;
+}
+
+body{
+    background:linear-gradient(135deg,#0f172a,#020617);
+    color:white;
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    padding:20px;
+}
+
+.container{
+    width:100%;
+    max-width:900px;
+    background:rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.1);
+    backdrop-filter:blur(12px);
+    border-radius:25px;
+    padding:30px;
+    box-shadow:0 0 30px rgba(0,0,0,0.4);
+}
+
+h1{
+    font-size:3rem;
+    text-align:center;
+    margin-bottom:10px;
+}
+
+.subtitle{
+    text-align:center;
+    opacity:0.7;
+    margin-bottom:30px;
+}
+
+.mail-box{
+    display:flex;
+    gap:10px;
+    margin-bottom:20px;
+}
+
+.mail-box input{
+    flex:1;
+    padding:15px;
+    border:none;
+    border-radius:15px;
+    font-size:1rem;
+    background:#111827;
+    color:white;
+}
+
+button{
+    padding:15px 20px;
+    border:none;
+    border-radius:15px;
+    cursor:pointer;
+    background:#3b82f6;
+    color:white;
+    font-weight:bold;
+    transition:0.2s;
+}
+
+button:hover{
+    transform:scale(1.05);
+    background:#2563eb;
+}
+
+.actions{
+    display:flex;
+    gap:10px;
+    margin-bottom:25px;
+    flex-wrap:wrap;
+}
+
+.inbox{
+    background:#0f172a;
+    border-radius:20px;
+    padding:20px;
+    min-height:300px;
+}
+
+.email{
+    background:#111827;
+    border-radius:15px;
+    padding:15px;
+    margin-bottom:15px;
+    cursor:pointer;
+    transition:0.2s;
+}
+
+.email:hover{
+    background:#1e293b;
+}
+
+.email h3{
+    margin-bottom:8px;
+}
+
+.email p{
+    opacity:0.8;
+}
+
+.modal{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.7);
+    display:none;
+    justify-content:center;
+    align-items:center;
+    padding:20px;
+}
+
+.modal-content{
+    background:#0f172a;
+    width:100%;
+    max-width:700px;
+    border-radius:20px;
+    padding:25px;
+    max-height:90vh;
+    overflow:auto;
+}
+
+.close-btn{
+    float:right;
+    background:red;
+}
+
+pre{
+    white-space:pre-wrap;
+    word-wrap:break-word;
+}
+
+.status{
+    margin-top:10px;
+    opacity:0.7;
+    text-align:center;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+    <h1>👻 GhostMail</h1>
+    <div class="subtitle">Correos temporales gratis</div>
+
+    <div class="mail-box">
+        <input type="text" id="email" readonly>
+        <button onclick="copyEmail()">Copiar</button>
+    </div>
+
+    <div class="actions">
+        <button onclick="generateMail()">Nuevo correo</button>
+        <button onclick="loadInbox()">Actualizar inbox</button>
+    </div>
+
+    <div class="status" id="status">Cargando...</div>
+
+    <div class="inbox" id="inbox">
+        <p>No hay mensajes todavía.</p>
+    </div>
+</div>
+
+<div class="modal" id="modal">
+    <div class="modal-content">
+        <button class="close-btn" onclick="closeModal()">X</button>
+        <h2 id="mailSubject"></h2>
+        <br>
+        <p><b>De:</b> <span id="mailFrom"></span></p>
+        <p><b>Fecha:</b> <span id="mailDate"></span></p>
+        <hr style="margin:20px 0; border-color:#334155;">
+        <pre id="mailBody"></pre>
+    </div>
+</div>
+
+<script>
+let token = "";
+let accountId = "";
+let currentEmail = "";
+let currentPassword = "";
+
+async function getDomains(){
+    const res = await fetch('https://api.mail.tm/domains');
+    const data = await res.json();
+    return data['hydra:member'];
+}
+
+function randomString(length){
+    const chars = 'abcdefghijklmnopqrstuvwxyz1234567890';
+    let result = '';
+
+    for(let i=0;i<length;i++){
+        result += chars[Math.floor(Math.random()*chars.length)];
+    }
+
+    return result;
+}
+
+async function generateMail(){
+    document.getElementById('status').innerText = 'Creando correo temporal...';
+
+    const domains = await getDomains();
+    const domain = domains[0].domain;
+
+    currentPassword = randomString(12);
+    currentEmail = randomString(10) + '@' + domain;
+
+    await fetch('https://api.mail.tm/accounts',{
+        method:'POST',
+        headers:{
+            'Content-Type':'application/json'
+        },
+        body:JSON.stringify({
+            address:currentEmail,
+            password:currentPassword
+        })
+    });
+
+    const loginRes = await fetch('https://api.mail.tm/token',{
+        method:'POST',
+        headers:{
+            'Content-Type':'application/json'
+        },
+        body:JSON.stringify({
+            address:currentEmail,
+            password:currentPassword
+        })
+    });
+
+    const loginData = await loginRes.json();
+
+    token = loginData.token;
+
+    document.getElementById('email').value = currentEmail;
+    document.getElementById('status').innerText = 'Correo listo ✔';
+
+    loadInbox();
+}
+
+async function loadInbox(){
+    if(!token) return;
+
+    document.getElementById('status').innerText = 'Actualizando mensajes...';
+
+    const res = await fetch('https://api.mail.tm/messages',{
+        headers:{
+            'Authorization':'Bearer ' + token
+        }
+    });
+
+    const data = await res.json();
+    const inbox = document.getElementById('inbox');
+
+    inbox.innerHTML = '';
+
+    if(data['hydra:member'].length === 0){
+        inbox.innerHTML = '<p>No hay mensajes todavía.</p>';
+    }
+
+    data['hydra:member'].forEach(mail=>{
+        const div = document.createElement('div');
+        div.className = 'email';
+
+        div.innerHTML = `
+            <h3>${mail.subject || 'Sin asunto'}</h3>
+            <p>De: ${mail.from.address}</p>
+        `;
+
+        div.onclick = ()=>openMail(mail.id);
+
+        inbox.appendChild(div);
+    });
+
+    document.getElementById('status').innerText = 'Inbox actualizada ✔';
+}
+
+async function openMail(id){
+    const res = await fetch('https://api.mail.tm/messages/' + id,{
+        headers:{
+            'Authorization':'Bearer ' + token
+        }
+    });
+
+    const mail = await res.json();
+
+    document.getElementById('mailSubject').innerText = mail.subject || 'Sin asunto';
+    document.getElementById('mailFrom').innerText = mail.from.address;
+    document.getElementById('mailDate').innerText = mail.createdAt;
+    document.getElementById('mailBody').innerText = mail.text || mail.html || 'Sin contenido';
+
+    document.getElementById('modal').style.display = 'flex';
+}
+
+function closeModal(){
+    document.getElementById('modal').style.display = 'none';
+}
+
+function copyEmail(){
+    const email = document.getElementById('email').value;
+
+    navigator.clipboard.writeText(email);
+
+    alert('Correo copiado ✔');
+}
+
+setInterval(loadInbox,10000);
+
+generateMail();
+</script>
+
+</body>
+</html>
