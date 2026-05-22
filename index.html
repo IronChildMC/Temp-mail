@@ -210,42 +210,69 @@ function randomString(length){
 async function generateMail(){
     document.getElementById('status').innerText = 'Creando correo temporal...';
 
-    const domains = await getDomains();
-    const domain = domains[0].domain;
+    try{
+        const domains = await getDomains();
+        const domain = domains[0].domain;
 
-    currentPassword = randomString(12);
-    currentEmail = randomString(10) + '@' + domain;
+        currentPassword = randomString(12);
+        currentEmail = randomString(10) + '@' + domain;
 
-    await fetch('https://api.mail.tm/accounts',{
-        method:'POST',
-        headers:{
-            'Content-Type':'application/json'
-        },
-        body:JSON.stringify({
-            address:currentEmail,
-            password:currentPassword
-        })
-    });
+        const createRes = await fetch('https://api.mail.tm/accounts',{
+            method:'POST',
+            headers:{
+                'Content-Type':'application/json'
+            },
+            body:JSON.stringify({
+                address:currentEmail,
+                password:currentPassword
+            })
+        });
 
-    const loginRes = await fetch('https://api.mail.tm/token',{
-        method:'POST',
-        headers:{
-            'Content-Type':'application/json'
-        },
-        body:JSON.stringify({
-            address:currentEmail,
-            password:currentPassword
-        })
-    });
+        if(createRes.status === 429){
+            document.getElementById('status').innerText = 'Demasiadas peticiones. Espera unos segundos.';
+            return;
+        }
 
-    const loginData = await loginRes.json();
+        const loginRes = await fetch('https://api.mail.tm/token',{
+            method:'POST',
+            headers:{
+                'Content-Type':'application/json'
+            },
+            body:JSON.stringify({
+                address:currentEmail,
+                password:currentPassword
+            })
+        });
 
-    token = loginData.token;
+        if(loginRes.status === 401){
+            document.getElementById('status').innerText = 'Error al iniciar sesion. Reintentando...';
+            setTimeout(generateMail,2000);
+            return;
+        }
 
-    document.getElementById('email').value = currentEmail;
-    document.getElementById('status').innerText = 'Correo listo ✔';
+        if(loginRes.status === 429){
+            document.getElementById('status').innerText = 'API saturada. Espera un poco.';
+            return;
+        }
 
-    loadInbox();
+        const loginData = await loginRes.json();
+
+        token = loginData.token;
+
+        if(!token){
+            document.getElementById('status').innerText = 'No se pudo obtener el token.';
+            return;
+        }
+
+        document.getElementById('email').value = currentEmail;
+        document.getElementById('status').innerText = 'Correo listo ✔';
+
+        loadInbox();
+
+    }catch(err){
+        console.error(err);
+        document.getElementById('status').innerText = 'Error conectando con la API.';
+    }
 }
 
 async function loadInbox(){
